@@ -96,16 +96,65 @@ __fgetwc(FILE *fp, locale_t locale)
 	return (__fgetwc_mbs(fp, &fp->_mbstate, &nread, locale));
 }
 
+/*
+ * The following macros and function support encoding 32-bit
+ * file descriptors in a backward compatible way in FILE objects
+ * using the existing 16-bit _file field as well as a 31-bit
+ * slice of the _flags2 field.
+ *
+ * A signed 32-bit file descriptor 'F' is encoded as follows:
+ *    INT_MIN <= F <         0 : _file = -1, _flags2[31:1] = 0
+ *          0 <= F <= SHRT_MAX : _file =  F, _flags2[31:1] = 0
+ *   SHRT_MAX <  F <= INT_MAX  : _file = -1, _flags2[31:1] = F
+ */
+#define __S2FDX_SHIFT  (1)
+#define __S2FDX_MASK   (((unsigned)(__S2FDX)) >> __S2FDX_SHIFT)
+
+#define __S2FDX_EXTRACT(flags2)						\
+	((int)(((unsigned)((flags2) & __S2FDX)) >> __S2FDX_SHIFT))
+
+#define __S2FDX_REPLACE(flags2, fdx)					\
+	((int)(((flags2) & ~__S2FDX) |					\
+	       (((fdx) & __S2FDX_MASK) << __S2FDX_SHIFT)))
+
+_Static_assert(__S2FDX_EXTRACT(__S2FDX) == INT_MAX,
+              "__S2FDX_EXTRACT invariant violated");
+
+_Static_assert(__S2FDX_REPLACE(~0, 0) == __S2OAP,
+              "__S2FDX_REPLACE invariant violated");
+
 static inline int
 __sfileno(const FILE *fp)
 {
-	return ((fp)->_file);
+	int fd, fdx;
+
+	fd = fp->_file;
+	if (fd == -1) {
+		fdx = __S2FDX_EXTRACT(fp->_flags2);
+		if (fdx > SHRT_MAX)
+			fd = fdx;
+	}
+	return (fd);
 }
 
 static inline void
 __sfileno_set(FILE *fp, int fd)
 {
-	fp->_file = (unsigned)fd > SHRT_MAX ? -1 : fd;
+	short fds;
+	int fdx;
+
+	if ((unsigned)fd > SHRT_MAX)
+		fds = -1;
+	else
+		fds = (short)fd;
+
+	if (fd > SHRT_MAX)
+		fdx = fd;
+	else
+		fdx = 0;
+
+	fp->_file = fds;
+	fp->_flags2 = __S2FDX_REPLACE(fp->_flags2, fdx);
 }
 
 /*
