@@ -41,7 +41,7 @@ int
 _fwalk(int (*function)(FILE *))
 {
 	FILE *fp;
-	int n, ret;
+	int n, ret, flags;
 	struct glue *g;
 
 	ret = 0;
@@ -55,7 +55,8 @@ _fwalk(int (*function)(FILE *))
 	 */
 	for (g = &__sglue; g != NULL; g = g->next)
 		for (fp = g->iobs, n = g->niobs; --n >= 0; fp++)
-			if ((fp->_flags != 0) && ((fp->_flags & __SIGN) == 0))
+			if (((flags = fp->_flags) != 0) &&
+			    ((flags & __SIGN) == 0))
 				ret |= (*function)(fp);
 	return (ret);
 }

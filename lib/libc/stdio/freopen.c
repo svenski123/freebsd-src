@@ -42,6 +42,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "un-namespace.h"
+#include <spinlock.h>
 #include "libc_private.h"
 #include "local.h"
 
@@ -56,6 +57,7 @@ freopen(const char * __restrict file, const char * __restrict mode,
 {
 	int f;
 	int dflags, fdflags, flags, isopen, oflags, sverrno, wantfd;
+	int fp_flags;
 
 	if ((flags = __sflags(mode, &oflags)) == 0) {
 		sverrno = errno;
@@ -64,10 +66,10 @@ freopen(const char * __restrict file, const char * __restrict mode,
 		return (NULL);
 	}
 
-	FLOCKFILE_CANCELSAFE(fp);
-
 	if (!__sdidinit)
 		__sinit();
+
+	FLOCKFILE_CANCELSAFE(fp);
 
 	/*
 	 * If the filename is a NULL pointer, the caller is asking us to
@@ -133,8 +135,21 @@ freopen(const char * __restrict file, const char * __restrict mode,
 	 * a descriptor, defer closing it; freopen("/dev/stdin", "r", stdin)
 	 * should work.  This is unnecessary if it was not a Unix file.
 	 */
-	if (fp->_flags == 0) {
+
+	/*
+	 * As __sfp() called by fopen, fdopen or funpen in another thread may
+	 * reuse closed FILE objects at any time, lock the glue list and set
+	 * _flags to ensure this doesn't happen. Note there is still a theo-
+	 * retical race condition if __sfp() has just acquired this FILE, as
+	 * it releases STDIO_THREAD_LOCK, proceeds to initialise it and then
+	 * gives it to fopen or fdopen neither of which lock the FILE object.
+	 */
+	STDIO_THREAD_LOCK();
+	if ((fp_flags = fp->_flags) == 0)
 		fp->_flags = __SEOF;	/* hold on to it */
+	STDIO_THREAD_UNLOCK();
+
+	if (fp_flags == 0) {
 		isopen = 0;
 		wantfd = -1;
 	} else {
@@ -192,7 +207,9 @@ finish:
 	if (f < 0) {			/* did not get it after all */
 		if (isopen)
 			(void) (*fp->_close)(fp->_cookie);
+		STDIO_THREAD_LOCK();
 		fp->_flags = 0;		/* set it free */
+		STDIO_THREAD_UNLOCK();
 		errno = sverrno;	/* restore in case _close clobbered */
 		fp = NULL;
 		goto end;
@@ -209,7 +226,7 @@ finish:
 			(void)_close(f);
 			f = wantfd;
 		} else
-			(void)_close(fp->_file);
+			(void)_close(wantfd);
 	}
 
 	/*
@@ -220,7 +237,10 @@ finish:
 	 * open.
 	 */
 	if (f > SHRT_MAX) {
+		_close(f);
+		STDIO_THREAD_LOCK();
 		fp->_flags = 0;		/* set it free */
+		STDIO_THREAD_UNLOCK();
 		errno = EMFILE;
 		fp = NULL;
 		goto end;
