@@ -97,64 +97,82 @@ __fgetwc(FILE *fp, locale_t locale)
 }
 
 /*
- * The following macros and function support encoding 32-bit
+ * The following macros and functions support encoding 32-bit
  * file descriptors in a backward compatible way in FILE objects
- * using the existing 16-bit _file field as well as a 31-bit
+ * using the existing 16-bit _file field as well as a 16-bit
  * slice of the _flags2 field.
  *
- * A signed 32-bit file descriptor 'F' is encoded as follows:
- *    INT_MIN <= F <         0 : _file = -1, _flags2[31:1] = 0
- *          0 <= F <= SHRT_MAX : _file =  F, _flags2[31:1] = 0
- *   SHRT_MAX <  F <= INT_MAX  : _file = -1, _flags2[31:1] = F
+ * A signed 32-bit file descriptor 'F' is encoded into two 16-bit
+ * parts 'L' and 'H' as follows:
+ *
+ * 'L' is simply the lower sixteen bits of 'F':
+ *
+ *     short L = (short)F
+ *
+ * 'H' is the upper sixteen bits of 'F' exclusive or'd with the fifteenth
+ * bit of 'F' (i.e. the sign bit of 'L'), or equivalently, the upper
+ * sixteen bits of the result of exclusive or'ing 'F' with the lower
+ * sixteen bits of 'F' sign extended to thirty two bits.
+ *
+ *     short H = (short)((F ^ (int)(short)F) >> 16)
+ *
+ * 'L' is stored in FILE->_file and 'H' is stored in a new 16-bit slice
+ * in FILE->_flags2. Note that for values of 'F' between SHRT_MIN and
+ * SHRT_MAX, 'H' will be zero and thus this encoding has the advantage
+ * of preserving binary encodings of FILE->_file and FILE->_flags2 for
+ * file descriptors in this range.
  */
-#define __S2FDX_SHIFT  (1)
-#define __S2FDX_MASK   (((unsigned)(__S2FDX)) >> __S2FDX_SHIFT)
+#define __S2FDX_SHFT			(1)
+#define __S2FDX_EXTRACT(_flags2)	\
+	    ((int)((unsigned)((_flags2) & __S2FDX) >> __S2FDX_SHFT))
 
-#define __S2FDX_EXTRACT(flags2)						\
-	((int)(((unsigned)((flags2) & __S2FDX)) >> __S2FDX_SHIFT))
+#define __S2FDX_INSERT(_flags2, val)	\
+	    ((_flags2) & (~__S2FDX) | (__S2FDX & ((val) << __S2FDX_SHFT)))
 
-#define __S2FDX_REPLACE(flags2, fdx)					\
-	((int)(((flags2) & ~__S2FDX) |					\
-	       (((fdx) & __S2FDX_MASK) << __S2FDX_SHIFT)))
+#define __SFD_TO_LOW(fd)		((short)(fd))
+#define __SFD_TO_HSX(fd)		\
+	    ((unsigned)((fd) ^ (int)(short)(fd)) >> 16)
 
-_Static_assert(__S2FDX_EXTRACT(__S2FDX) == INT_MAX,
-              "__S2FDX_EXTRACT invariant violated");
+#define __SLOW_HSX_TO_FD(low, hsx)	((int)(short)(low) ^ ((int)(hsx) << 16))
 
-_Static_assert(__S2FDX_REPLACE(~0, 0) == __S2OAP,
-              "__S2FDX_REPLACE invariant violated");
+_Static_assert(USHRT_MAX << __S2FDX_SHFT	== __S2FDX,	 "__S2FDX");
+_Static_assert(__S2FDX_EXTRACT(__S2FDX)		== USHRT_MAX,	 "__S2FDX");
+_Static_assert(__S2FDX_INSERT(~0, 0)		== ~__S2FDX,	 "__S2FDX");
+_Static_assert(__SFD_TO_LOW(SHRT_MIN - 1)	== SHRT_MAX,	 "__S2FDX");
+_Static_assert(__SFD_TO_LOW(SHRT_MIN)		== SHRT_MIN,	 "__S2FDX");
+_Static_assert(__SFD_TO_LOW(-1)			== -1,		 "__S2FDX");
+_Static_assert(__SFD_TO_LOW(0)			== 0,		 "__S2FDX");
+_Static_assert(__SFD_TO_LOW(SHRT_MAX)		== SHRT_MAX,	 "__S2FDX");
+_Static_assert(__SFD_TO_LOW(SHRT_MAX + 1)	== SHRT_MIN,	 "__S2FDX");
+_Static_assert(__SFD_TO_HSX(SHRT_MIN - 1)	== USHRT_MAX,	 "__S2FDX");
+_Static_assert(__SFD_TO_HSX(SHRT_MIN)		== 0,		 "__S2FDX");
+_Static_assert(__SFD_TO_HSX(-1)			== 0,		 "__S2FDX");
+_Static_assert(__SFD_TO_HSX(0)			== 0,		 "__S2FDX");
+_Static_assert(__SFD_TO_HSX(SHRT_MAX)		== 0,		 "__S2FDX");
+_Static_assert(__SFD_TO_HSX(SHRT_MAX + 1)	== USHRT_MAX,	 "__S2FDX");
+_Static_assert(__SLOW_HSX_TO_FD(0, SHRT_MIN)	== INT_MIN,	 "__S2FDX");
+_Static_assert(__SLOW_HSX_TO_FD(SHRT_MIN, 0)	== SHRT_MIN,	 "__S2FDX");
+_Static_assert(__SLOW_HSX_TO_FD(-1, 0)		== -1,		 "__S2FDX");
+_Static_assert(__SLOW_HSX_TO_FD(0, 0)		== 0,		 "__S2FDX");
+_Static_assert(__SLOW_HSX_TO_FD(SHRT_MAX, 0)	== SHRT_MAX,	 "__S2FDX");
+_Static_assert(__SLOW_HSX_TO_FD(SHRT_MIN, -1)	== SHRT_MAX + 1, "__S2FDX");
+_Static_assert(__SLOW_HSX_TO_FD(-1, SHRT_MIN)	== INT_MAX,	 "__S2FDX");
 
 static inline int
 __sfileno(const FILE *fp)
 {
-	int fd, fdx;
+	int fd;
 
-	fd = fp->_file;
-	if (fd == -1) {
-		fdx = __S2FDX_EXTRACT(fp->_flags2);
-		if (fdx > SHRT_MAX)
-			fd = fdx;
-	}
+	fd = __S2FDX_EXTRACT(fp->_flags2);
+	fd = __SLOW_HSX_TO_FD(fp->_file, fd);
 	return (fd);
 }
 
 static inline void
 __sfileno_set(FILE *fp, int fd)
 {
-	short fds;
-	int fdx;
-
-	if ((unsigned)fd > SHRT_MAX)
-		fds = -1;
-	else
-		fds = (short)fd;
-
-	if (fd > SHRT_MAX)
-		fdx = fd;
-	else
-		fdx = 0;
-
-	fp->_file = fds;
-	fp->_flags2 = __S2FDX_REPLACE(fp->_flags2, fdx);
+	fp->_file = __SFD_TO_LOW(fd);
+	fp->_flags2 = __S2FDX_INSERT(fp->_flags2, __SFD_TO_HSX(fd));
 }
 
 /*
