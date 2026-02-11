@@ -165,9 +165,8 @@ _sseek(FILE *fp, fpos_t offset, int whence)
 }
 
 void
-__stdio_cancel_cleanup(void * arg)
+__stdio_cancel_cleanup(void *arg)
 {
-
 	if (arg != NULL)
 		_funlockfile((FILE *)arg);
 }
