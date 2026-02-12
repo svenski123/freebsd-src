@@ -40,12 +40,15 @@
 #ifndef _STDIO_LOCAL_H
 #define	_STDIO_LOCAL_H
 
+#include "namespace.h"
 #include <sys/types.h>	/* for off_t */
 #include <limits.h>
 #include <locale.h>
 #include <pthread.h>
 #include <string.h>
+#include <stdbool.h>
 #include <wchar.h>
+#include "un-namespace.h"
 
 /*
  * Information local to this implementation of stdio,
@@ -69,7 +72,7 @@ extern int	__sread(void *, char *, int);
 extern int	__swrite(void *, char const *, int);
 extern fpos_t	__sseek(void *, fpos_t, int);
 extern int	__sclose(void *);
-extern void	__sinit(void);
+extern void	__stdio_init_sync(void);
 extern void	_cleanup(void);
 extern void	__smakebuf(FILE *);
 extern int	__swhatbuf(FILE *, size_t *, int *);
@@ -86,7 +89,8 @@ extern int	__vfwscanf(FILE * __restrict, locale_t, const wchar_t * __restrict,
 		    __va_list);
 extern size_t	__fread(void * __restrict buf, size_t size, size_t count,
 		FILE * __restrict fp);
-extern int	__sdidinit;
+extern bool	__stdio_initialised;
+extern bool	__stdio_init_force_short_fildes_only;
 
 static inline wint_t
 __fgetwc(FILE *fp, locale_t locale)
@@ -94,6 +98,28 @@ __fgetwc(FILE *fp, locale_t locale)
 	int nread;
 
 	return (__fgetwc_mbs(fp, &fp->_mbstate, &nread, locale));
+}
+
+/*
+ * Inline function called at ten different call sites in stdio to ensure
+ * the stdio subsystem has been properly initialised. If initialisation
+ * has not occurred or is pending, __stdio_init_sync() is called which
+ * handles possible concurrent initialisation safely. Once initialised,
+ * this function becomes effectively a no-op.
+ */
+static inline void
+__stdio_init_if_needed(void)
+{
+        if (__predict_true(__stdio_initialised))
+		return;
+
+	__stdio_init_sync();
+}
+
+static inline bool
+__sforce_short_fildes_only(bool short_only)
+{
+	return (short_only || __stdio_init_force_short_fildes_only);
 }
 
 /*
@@ -163,16 +189,24 @@ __sfileno(const FILE *fp)
 {
 	int fd;
 
-	fd = __S2FDX_EXTRACT(fp->_flags2);
-	fd = __SLOW_HSX_TO_FD(fp->_file, fd);
+	if (__stdio_init_force_short_fildes_only)
+		fd = fp->_file;
+	else {
+		fd = __S2FDX_EXTRACT(fp->_flags2);
+		fd = __SLOW_HSX_TO_FD(fp->_file, fd);
+	}
 	return (fd);
 }
 
 static inline void
 __sfileno_set(FILE *fp, int fd)
 {
-	fp->_file = __SFD_TO_LOW(fd);
-	fp->_flags2 = __S2FDX_INSERT(fp->_flags2, __SFD_TO_HSX(fd));
+	if (__stdio_init_force_short_fildes_only)
+		fp->_file = (unsigned)fd > SHRT_MAX ? -1 : (short)fd;
+	else {
+		fp->_file = __SFD_TO_LOW(fd);
+		fp->_flags2 = __S2FDX_INSERT(fp->_flags2, __SFD_TO_HSX(fd));
+	}
 }
 
 /*

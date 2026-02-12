@@ -65,8 +65,7 @@ __srefill(FILE *fp)
 {
 
 	/* make sure stdio is set up */
-	if (!__sdidinit)
-		__sinit();
+	__stdio_init_if_needed();
 
 	ORIENT(fp, -1);
 

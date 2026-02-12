@@ -88,8 +88,7 @@ ungetc(int c, FILE *fp)
 {
 	int ret;
 
-	if (!__sdidinit)
-		__sinit();
+	__stdio_init_if_needed();
 	FLOCKFILE_CANCELSAFE(fp);
 	ORIENT(fp, -1);
 	ret = __ungetc(c, fp);

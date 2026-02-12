@@ -35,6 +35,8 @@
 #include <sys/param.h>
 #include <machine/atomic.h>
 #include <unistd.h>
+#include <errno.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -46,7 +48,9 @@
 #include "local.h"
 #include "glue.h"
 
-int	__sdidinit;
+static pthread_once_t	__stdio_init_sync_once_control = PTHREAD_ONCE_INIT;
+bool			__stdio_initialised = false;
+bool			__stdio_init_force_short_fildes_only = false;
 
 #define	NDYNAMIC 10		/* add ten more whenever necessary */
 
@@ -118,8 +122,7 @@ __sfp(void)
 	int	n;
 	struct glue *g;
 
-	if (!__sdidinit)
-		__sinit();
+	__stdio_init_if_needed();
 	/*
 	 * The list must be locked because a FILE may be updated.
 	 */
@@ -203,13 +206,43 @@ _cleanup(void)
 }
 
 /*
- * __sinit() is called whenever stdio's internal variables must be set up.
+ * __stdio_init_sync_once() performs one-time stdio initialisation on demand.
+ * It is called by __stdio_init_sync() using _once() which guarantees
+ * synchronisation in a multi-threaded context.
+ *
+ * The __cleanup function pointer has been around for decades and comments
+ * suggest the intent was to prevent stdio code from being statically linked
+ * into an application if it was never called.
+ *
+ * However this is no longer the case as compiling the trivial program
+ * 'int main(){}' and examining the resulting binary's symbol table will
+ * reveal a large amount of stdio code that has been linked in.
+ *
+ * If stdio code is to be linked in to all binaries by default, then this
+ * dynamic initialise stdio upon first use at runtime code can be scrapped
+ * along with the __cleanup function and instead have exit() and abort()
+ * call _cleanup() directly and have the environemnt variable check be
+ * invoked as part of the libc runtime startup by putting it in an
+ * __attribute__((constructor)) function.
  */
-void
-__sinit(void)
+static void
+__stdio_init_sync_once(void)
 {
-
 	/* Make sure we clean up on exit. */
 	__cleanup = _cleanup;		/* conservative */
-	__sdidinit = 1;
+
+	if (getenv("LIBC_STDIO_FORCE_SHORT_FILDES_ONLY") != NULL)
+		__stdio_init_force_short_fildes_only = true;
+
+	__stdio_initialised = true;
+}
+
+/*
+ * Extern function initialises stdio once (and only once) in either
+ * a single threaded or multi-threaded context,
+ */
+void
+__stdio_init_sync(void)
+{
+	_once(&__stdio_init_sync_once_control, &__stdio_init_sync_once);
 }

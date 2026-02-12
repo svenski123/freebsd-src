@@ -53,8 +53,7 @@ fseek(FILE *fp, long offset, int whence)
 	int serrno = errno;
 
 	/* make sure stdio is set up */
-	if (!__sdidinit)
-		__sinit();
+	__stdio_init_if_needed();
 
 	FLOCKFILE_CANCELSAFE(fp);
 	ret = _fseeko(fp, (off_t)offset, whence, 1);
@@ -71,8 +70,7 @@ fseeko(FILE *fp, off_t offset, int whence)
 	int serrno = errno;
 
 	/* make sure stdio is set up */
-	if (!__sdidinit)
-		__sinit();
+	__stdio_init_if_needed();
 
 	FLOCKFILE_CANCELSAFE(fp);
 	ret = _fseeko(fp, offset, whence, 0);

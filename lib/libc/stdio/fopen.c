@@ -68,7 +68,7 @@ __sfopen(const char * __restrict file, const char * __restrict mode,
 	 * invalid file descriptor.  Handle this case by failing the
 	 * open.
 	 */
-	if (short_only && f > SHRT_MAX) {
+	if (__sforce_short_fildes_only(short_only) && f > SHRT_MAX) {
 		fp->_flags = 0;			/* release */
 		_close(f);
 		errno = EMFILE;

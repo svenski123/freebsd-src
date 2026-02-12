@@ -67,8 +67,7 @@ __sfreopen(const char * __restrict file, const char * __restrict mode,
 		return (NULL);
 	}
 
-	if (!__sdidinit)
-		__sinit();
+	__stdio_init_if_needed();
 
 	FLOCKFILE_CANCELSAFE(fp);
 
@@ -237,7 +236,7 @@ finish:
 	 * invalid file descriptor.  Handle this case by failing the
 	 * open.
 	 */
-	if (short_only && f > SHRT_MAX) {
+	if (__sforce_short_fildes_only(short_only) && f > SHRT_MAX) {
 		_close(f);
 		STDIO_THREAD_LOCK();
 		fp->_flags = 0;		/* set it free */
