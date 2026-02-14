@@ -61,7 +61,7 @@ __sfdopen(int fd, const char * __restrict mode, bool short_only)
 	 * invalid file descriptor.  Handle this case by failing the
 	 * open.
 	 */
-	if (__sforce_short_fildes_only(short_only) && fd > SHRT_MAX) {
+	if (__sforce_short_fildes(short_only) && fd > SHRT_MAX) {
 		errno = EMFILE;
 		return (NULL);
 	}

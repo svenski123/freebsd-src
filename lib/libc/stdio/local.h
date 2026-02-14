@@ -88,7 +88,7 @@ extern int	 _sread(FILE *, char *, int);
 extern fpos_t	 _sseek(FILE *, fpos_t, int);
 extern int	 _swrite(FILE *, char const *, int);
 
-extern bool	 __stdio_force_short_fildes_only;
+extern bool	 __stdio_force_short_fildes;
 
 static inline wint_t
 __fgetwc(FILE *fp, locale_t locale)
@@ -99,9 +99,9 @@ __fgetwc(FILE *fp, locale_t locale)
 }
 
 static inline bool
-__sforce_short_fildes_only(bool short_only)
+__sforce_short_fildes(bool short_only)
 {
-	return (short_only || __stdio_force_short_fildes_only);
+	return (short_only || __stdio_force_short_fildes);
 }
 
 /*
@@ -171,7 +171,7 @@ __sfileno(const FILE *fp)
 {
 	int fd;
 
-	if (__stdio_force_short_fildes_only)
+	if (__stdio_force_short_fildes)
 		fd = fp->_file;
 	else {
 		fd = __S2FDX_EXTRACT(fp->_flags2);
@@ -183,7 +183,7 @@ __sfileno(const FILE *fp)
 static inline void
 __sfileno_set(FILE *fp, int fd)
 {
-	if (__stdio_force_short_fildes_only)
+	if (__stdio_force_short_fildes)
 		fp->_file = (unsigned)fd > SHRT_MAX ? -1 : (short)fd;
 	else {
 		fp->_file = __SFD_TO_LOW(fd);

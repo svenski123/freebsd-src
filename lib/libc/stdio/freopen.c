@@ -234,7 +234,7 @@ finish:
 	 * invalid file descriptor.  Handle this case by failing the
 	 * open.
 	 */
-	if (__sforce_short_fildes_only(short_only) && f > SHRT_MAX) {
+	if (__sforce_short_fildes(short_only) && f > SHRT_MAX) {
 		_close(f);
 		STDIO_THREAD_LOCK();
 		fp->_flags = 0;		/* set it free */

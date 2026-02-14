@@ -48,7 +48,7 @@
 #include "local.h"
 #include "glue.h"
 
-bool	__stdio_force_short_fildes_only = false;
+bool	__stdio_force_short_fildes = false;
 
 #define	NDYNAMIC 10		/* add ten more whenever necessary */
 
@@ -208,6 +208,6 @@ _cleanup(void)
 __attribute__((constructor)) static void
 __stdio_init(void)
 {
-	if (getenv("LIBC_STDIO_FORCE_SHORT_FILDES_ONLY") != NULL)
-		__stdio_force_short_fildes_only = true;
+	if (getenv("LIBC_STDIO_FORCE_SHORT_FILDES") != NULL)
+		__stdio_force_short_fildes = true;
 }
