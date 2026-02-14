@@ -40,7 +40,6 @@
 #ifndef _STDIO_LOCAL_H
 #define	_STDIO_LOCAL_H
 
-#include "namespace.h"
 #include <sys/types.h>	/* for off_t */
 #include <limits.h>
 #include <locale.h>
@@ -48,7 +47,6 @@
 #include <string.h>
 #include <stdbool.h>
 #include <wchar.h>
-#include "un-namespace.h"
 
 /*
  * Information local to this implementation of stdio,

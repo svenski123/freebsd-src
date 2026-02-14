@@ -35,7 +35,6 @@
 #include <sys/param.h>
 #include <machine/atomic.h>
 #include <unistd.h>
-#include <errno.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
