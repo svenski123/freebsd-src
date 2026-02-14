@@ -70,7 +70,6 @@ extern void	 __smakebuf(FILE *);
 extern int	 __sread(void *, char *, int);
 extern int	 __srefill(FILE *);
 extern fpos_t	 __sseek(void *, fpos_t, int);
-extern void	 __stdio_init_sync(void);
 extern int	 __svfscanf(FILE *, locale_t, const char *, __va_list);
 extern int	 __swhatbuf(FILE *, size_t *, int *);
 extern int	 __swrite(void *, char const *, int);
@@ -82,7 +81,6 @@ extern int	 __vfscanf(FILE *, const char *, __va_list);
 extern int	 __vfwprintf(FILE *, locale_t, const wchar_t *, __va_list);
 extern int	 __vfwscanf(FILE * __restrict, locale_t,
 		    const wchar_t * __restrict, __va_list);
-extern void	 _cleanup(void);
 extern int	 _fseeko(FILE *, off_t, int, int);
 extern int	 _ftello(FILE *, fpos_t *);
 extern int	 _fwalk(int (*)(FILE *));
@@ -90,8 +88,7 @@ extern int	 _sread(FILE *, char *, int);
 extern fpos_t	 _sseek(FILE *, fpos_t, int);
 extern int	 _swrite(FILE *, char const *, int);
 
-extern bool	 __stdio_initialised;
-extern bool	 __stdio_init_force_short_fildes_only;
+extern bool	 __stdio_force_short_fildes_only;
 
 static inline wint_t
 __fgetwc(FILE *fp, locale_t locale)
@@ -101,26 +98,10 @@ __fgetwc(FILE *fp, locale_t locale)
 	return (__fgetwc_mbs(fp, &fp->_mbstate, &nread, locale));
 }
 
-/*
- * Inline function called at ten different call sites in stdio to ensure
- * the stdio subsystem has been properly initialised. If initialisation
- * has not occurred or is pending, __stdio_init_sync() is called which
- * handles possible concurrent initialisation safely. Once initialised,
- * this function becomes effectively a no-op.
- */
-static inline void
-__stdio_init_if_needed(void)
-{
-        if (__predict_true(__stdio_initialised))
-		return;
-
-	__stdio_init_sync();
-}
-
 static inline bool
 __sforce_short_fildes_only(bool short_only)
 {
-	return (short_only || __stdio_init_force_short_fildes_only);
+	return (short_only || __stdio_force_short_fildes_only);
 }
 
 /*
@@ -190,7 +171,7 @@ __sfileno(const FILE *fp)
 {
 	int fd;
 
-	if (__stdio_init_force_short_fildes_only)
+	if (__stdio_force_short_fildes_only)
 		fd = fp->_file;
 	else {
 		fd = __S2FDX_EXTRACT(fp->_flags2);
@@ -202,7 +183,7 @@ __sfileno(const FILE *fp)
 static inline void
 __sfileno_set(FILE *fp, int fd)
 {
-	if (__stdio_init_force_short_fildes_only)
+	if (__stdio_force_short_fildes_only)
 		fp->_file = (unsigned)fd > SHRT_MAX ? -1 : (short)fd;
 	else {
 		fp->_file = __SFD_TO_LOW(fd);

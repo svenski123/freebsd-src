@@ -58,7 +58,6 @@ __smakebuf(FILE *fp)
 	size_t size;
 	int couldbetty;
 
-	__stdio_init_if_needed();
 	if (fp->_flags & __SNBF) {
 		fp->_bf._base = fp->_p = fp->_nbuf;
 		fp->_bf._size = 1;

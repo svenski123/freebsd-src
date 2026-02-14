@@ -67,8 +67,6 @@ __sfreopen(const char * __restrict file, const char * __restrict mode,
 		return (NULL);
 	}
 
-	__stdio_init_if_needed();
-
 	FLOCKFILE_CANCELSAFE(fp);
 
 	/*

@@ -60,8 +60,6 @@ setvbuf(FILE * __restrict fp, char * __restrict buf, int mode, size_t size)
 		if ((mode != _IOFBF && mode != _IOLBF) || size > INT_MAX)
 			return (EOF);
 
-	__stdio_init_if_needed();
-
 	FLOCKFILE_CANCELSAFE(fp);
 	/*
 	 * Write current buffer, if any.  Discard unread input (including

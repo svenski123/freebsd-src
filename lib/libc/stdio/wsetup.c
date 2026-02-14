@@ -45,9 +45,6 @@
 int
 __swsetup(FILE *fp)
 {
-	/* make sure stdio is set up */
-	__stdio_init_if_needed();
-
 	/*
 	 * If we are not writing, we had better be reading and writing.
 	 */
